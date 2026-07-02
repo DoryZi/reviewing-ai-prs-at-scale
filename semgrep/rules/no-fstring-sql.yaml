@@ -1,0 +1,52 @@
+rules:
+  # Taint-mode: any string built via f-string / %-format / .format() / concatenation
+  # that FLOWS into an execute sink is flagged — including across intermediate
+  # variables and += accumulation. Reassigning the variable to a safe parameterized
+  # string before execute kills the taint. Purely-literal concatenation (splitting a
+  # long query across lines) and appending UPPER_SNAKE constant fragments are not
+  # treated as taint.
+  #
+  # KNOWN LIMIT — this analysis is intra-procedural (semgrep OSS): SQL built inside
+  # a helper (`def build_query(name): return f"..."`) and executed by the caller is
+  # NOT caught here. That's the boundary of layer 1; deeper cross-function reasoning
+  # is exactly what the AI-review layers (2-4) of the stack are for.
+  - id: no-fstring-sql
+    languages: [python]
+    severity: ERROR
+    mode: taint
+    message: >
+      SQL built from an f-string, %-format, .format(), or string concatenation —
+      this is how SQL injection happens. Use a parameterized query:
+      execute("... WHERE x = ?", (value,)).
+    pattern-sources:
+      - pattern: f"..."
+      - patterns:
+          - pattern: '"..." + $VAR'
+          - metavariable-pattern:
+              metavariable: $VAR
+              patterns:
+                - pattern-not: '"..."'
+      - patterns:
+          - pattern: $VAR + "..."
+          - metavariable-pattern:
+              metavariable: $VAR
+              patterns:
+                - pattern-not: '"..."'
+      - pattern: '"..." % $VAR'
+      - pattern: '"...".format(...)'
+      # Appending anything non-literal onto a would-be SQL string taints it too —
+      # except UPPER_SNAKE names, trusted as constant fragments by convention.
+      - patterns:
+          - pattern: $Q += $VAR
+          - metavariable-pattern:
+              metavariable: $VAR
+              patterns:
+                - pattern-not: '"..."'
+                - pattern-not-regex: ^[A-Z_][A-Z0-9_]*$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CONN.execute($Q, ...)
+              - pattern: $CONN.executemany($Q, ...)
+              - pattern: $CONN.executescript($Q)
+          - focus-metavariable: $Q

@@ -1,0 +1,3 @@
+# Override semgrep's built-in default ignore list, which silently skips tests/.
+# Tests are code too — SQL built unsafely in a test helper is still a bug.
+.git/

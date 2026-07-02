@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Layer 1 of the review stack: free, instant, zero-context static checks.
+# Wire it up once with:  git config core.hooksPath .githooks
+#
+# Checks the STAGED INDEX — the exact bytes that will be committed — not the
+# working tree, which may differ (staged bug + restored worktree, or the reverse).
+set -euo pipefail
+
+echo "review-stack layer 1: static checks (staged index)"
+
+# GUI git clients often run hooks with a minimal PATH; fail with a clear cause.
+command -v uv >/dev/null 2>&1 || {
+  echo "✗ uv not found in PATH — layer 1 needs uv (https://docs.astral.sh/uv/)." >&2
+  echo "  Committing from a GUI client? Make sure its PATH includes uv." >&2
+  exit 1
+}
+
+repo_root="$(git rev-parse --show-toplevel)"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+git checkout-index --prefix="$tmp/staged/" -a
+
+# An empty index (e.g. `git commit --allow-empty`) checks out nothing.
+if [ ! -d "$tmp/staged" ]; then
+  echo "✓ empty index — nothing to check"
+  exit 0
+fi
+cd "$tmp/staged"
+
+# The three checks are independent — run them in parallel so the hook costs
+# max(check) wall-clock, not the sum. cwd is the staged snapshot, so failure
+# output shows repo-relative paths. --frozen: use the lockfile as-is; a commit
+# must never rewrite uv.lock in the working tree as a side effect.
+uv run --frozen --project "$repo_root" ruff check . >"$tmp/lint.log" 2>&1 &
+lint_pid=$!
+uv run --frozen --project "$repo_root" ruff format --check . >"$tmp/format.log" 2>&1 &
+format_pid=$!
+uv run --frozen --project "$repo_root" semgrep scan --config semgrep/rules --error --quiet . \
+  >"$tmp/semgrep.log" 2>&1 &
+semgrep_pid=$!
+
+fail=0
+report() { # $1=name $2=pid $3=log
+  if wait "$2"; then
+    echo "✓ $1"
+  else
+    fail=1
+    echo "✗ $1"
+    cat "$3"
+  fi
+}
+report "ruff lint" "$lint_pid" "$tmp/lint.log"
+report "ruff format" "$format_pid" "$tmp/format.log"
+report "semgrep (custom rules in semgrep/rules/)" "$semgrep_pid" "$tmp/semgrep.log"
+
+if [ "$fail" -ne 0 ]; then
+  echo "✗ layer 1 blocked the commit"
+  exit 1
+fi
+echo "✓ layer 1 clean — commit allowed"
