@@ -8,8 +8,17 @@ thorough**, where each lever catches what the previous one missed.
 
 The demo app is a deliberately boring expense tracker API (`app/`). The
 `feature/budgets-reports` branch is a real, unreviewed, AI-built **637-line PR**
-([#1](https://github.com/DoryZi/self-healing-reviews/pull/1)) — the "giant PR" every
+([#1](https://github.com/DoryZi/reviewing-ai-prs-at-scale/pull/1)) — the "giant PR" every
 lever is measured against.
+
+## 📺 Watch & read
+
+This repo is the companion code for a full walkthrough — every lever demoed live.
+
+- ▶ **Video:** [Reviewing AI PRs at Scale — 5 Levers to Stop Drowning](https://youtube.com/watch?v=tTl1gF31rp8)
+- 📄 **Blog (written companion):** https://doryzidon.com/blog/reviewing-ai-prs-at-scale
+- 📬 **Newsletter — AI Will Replace Your Engineers:** [subscribe](https://www.linkedin.com/build-relation/newsletter-follow?entityUrn=7453650303100383232)
+- 🧰 **Related:** [Claude Code review costs $25, so I built my own for free](https://doryzidon.com/blog/ai-code-review-diy)
 
 ## The 5 levers
 
